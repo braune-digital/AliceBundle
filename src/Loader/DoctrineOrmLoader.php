@@ -19,7 +19,9 @@ use Hautelook\AliceBundle\Resolver\File\KernelFileResolver;
 use Nelmio\Alice\IsAServiceTrait;
 use Psr\Log\LoggerInterface;
 use Symfony\Bundle\FrameworkBundle\Console\Application;
+use Symfony\Component\DependencyInjection\ContainerInterface;
 use Symfony\Component\HttpKernel\KernelInterface;
+use Symfony\Component\Process\Process;
 
 final class DoctrineOrmLoader implements AliceBundleLoaderInterface, LoggerAwareInterface
 {
@@ -45,11 +47,17 @@ final class DoctrineOrmLoader implements AliceBundleLoaderInterface, LoggerAware
      */
     private $logger;
 
+    /**
+     * @var ContainerInterface
+     */
+    private $container;
+
     public function __construct(
         BundleResolverInterface $bundleResolver,
         FixtureLocatorInterface $fixtureLocator,
         LoaderInterface $loader,
-        LoggerInterface $logger
+        LoggerInterface $logger,
+		ContainerInterface $container
     ) {
         $this->bundleResolver = $bundleResolver;
         $this->fixtureLocator = $fixtureLocator;
@@ -63,6 +71,7 @@ final class DoctrineOrmLoader implements AliceBundleLoaderInterface, LoggerAware
         }
         $this->loader = $loader;
         $this->logger = $logger;
+        $this->container = $container;
     }
 
     /**
@@ -83,30 +92,60 @@ final class DoctrineOrmLoader implements AliceBundleLoaderInterface, LoggerAware
         string $environment,
         bool $append,
         bool $purgeWithTruncate,
-        string $shard = null
+        string $shard = null,
+        $purgeCachedDumpFile = false,
+		array $fixtureFiles = null
     ) {
         $bundles = $this->bundleResolver->resolveBundles($application, $bundles);
-        $fixtureFiles = $this->fixtureLocator->locateFiles($bundles, $environment);
+        if (!$fixtureFiles) {
+        	$fixtureFiles = $this->fixtureLocator->locateFiles($bundles, $environment);
+		}
 
-        $this->logger->info('fixtures found', ['files' => $fixtureFiles]);
+		/**
+		 * If cache is enabled, search for relevant dump file
+		 * If this file does not exists, create fixtures and generate dump file
+		 */
+		$useCache = $this->container->getParameter('hautelook_alice.use_cache');
+		$cacheDir = $this->container->get('kernel')->getCacheDir();
+		$dumpFile = sprintf("%s/db_fixture_dump_%s.sql", $cacheDir, md5(serialize($fixtureFiles)));
 
-        if (null !== $shard) {
-            $this->connectToShardConnection($manager, $shard);
-        }
+		if (file_exists($dumpFile) && $purgeCachedDumpFile) {
+			unlink($dumpFile);
+		}
 
-        $fixtures = $this->loadFixtures(
-            $this->loader,
-            $application->getKernel(),
-            $manager,
-            $fixtureFiles,
-            $application->getKernel()->getContainer()->getParameterBag()->all(),
-            $append,
-            $purgeWithTruncate
-        );
+		if ($useCache && file_exists($dumpFile)) {
+			$process = new Process(sprintf("%s -h %s -u %s --password=%s %s < %s", $this->container->getParameter('hautelook_alice.mysql_binary'), $manager->getConnection()->getHost(), $manager->getConnection()->getUsername(), $manager->getConnection()->getPassword(), $manager->getConnection()->getDatabase(), $dumpFile));
+			$process->run();
+			return [];
 
-        $this->logger->info('fixtures loaded');
+		} else {
+			$this->logger->info('fixtures found', ['files' => $fixtureFiles]);
 
-        return $fixtures;
+			if (null !== $shard) {
+				$this->connectToShardConnection($manager, $shard);
+			}
+
+			$fixtures = $this->loadFixtures(
+				$this->loader,
+				$application->getKernel(),
+				$manager,
+				$fixtureFiles,
+				$application->getKernel()->getContainer()->getParameterBag()->all(),
+				$append,
+				$purgeWithTruncate
+			);
+
+			$this->logger->info('fixtures loaded');
+
+
+			if ($useCache) {
+				$process = new Process(sprintf("%s -h %s -u %s --password=%s %s > %s", $this->container->getParameter('hautelook_alice.mysqldump_binary'), $manager->getConnection()->getHost(), $manager->getConnection()->getUsername(), $manager->getConnection()->getPassword(), $manager->getConnection()->getDatabase(), $dumpFile));
+				$process->run();
+			}
+
+			return $fixtures;
+		}
+
     }
 
     private function connectToShardConnection(EntityManagerInterface $manager, string $shard)

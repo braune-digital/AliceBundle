@@ -13,6 +13,7 @@ namespace Hautelook\AliceBundle\Console\Command\Doctrine;
 
 use Doctrine\Common\Persistence\ManagerRegistry;
 use Hautelook\AliceBundle\LoaderInterface as AliceBundleLoaderInterface;
+use Symfony\Bundle\FrameworkBundle\Command\ContainerAwareCommand;
 use Symfony\Bundle\FrameworkBundle\Console\Application as FrameworkBundleConsoleApplication;
 use Symfony\Component\Console\Application as ConsoleApplication;
 use Symfony\Component\Console\Command\Command;
@@ -21,13 +22,14 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Question\ConfirmationQuestion;
+use Symfony\Component\Process\Process;
 
 /**
  * Command used to load the fixtures.
  *
  * @author Théo FIDRY <theo.fidry@gmail.com>
  */
-final class DoctrineOrmLoadDataFixturesCommand extends Command
+final class DoctrineOrmLoadDataFixturesCommand extends ContainerAwareCommand
 {
     /**
      * @var ManagerRegistry
@@ -85,6 +87,16 @@ final class DoctrineOrmLoadDataFixturesCommand extends Command
                 InputOption::VALUE_NONE,
                 'Purge data by using a database-level TRUNCATE statement when using Doctrine fixtures.'
             )
+            ->addOption('purge-cached-dump-file',
+                null,
+                InputOption::VALUE_OPTIONAL,
+                'Purge the dump file which is used to increase performance.'
+            )
+            ->addOption('files',
+                null,
+                InputOption::VALUE_OPTIONAL,
+                'Files to load'
+            )
         ;
     }
 
@@ -127,16 +139,20 @@ final class DoctrineOrmLoadDataFixturesCommand extends Command
             }
         }
 
-        $manager = $this->doctrine->getManager($input->getOption('manager'));
-        $environment = $input->getOption('env');
-        $bundles = $input->getOption('bundle');
-        $shard = $input->getOption('shard');
-        $append = $input->getOption('append');
-        $truncate = $input->getOption('purge-with-truncate');
-        /** @var FrameworkBundleConsoleApplication $application */
-        $application = $this->getApplication();
 
-        $this->loader->load($application, $manager, $bundles, $environment, $append, $truncate, $shard);
+		$manager = $this->doctrine->getManager($input->getOption('manager'));
+		$environment = $input->getOption('env');
+		$bundles = $input->getOption('bundle');
+		$shard = $input->getOption('shard');
+		$append = $input->getOption('append');
+		$truncate = $input->getOption('purge-with-truncate');
+		$purgeCachedDumpFile = $input->getOption('purge-cached-dump-file');
+		$files = explode(',', str_replace(' ', '', $input->getOption('files')));
+		/** @var FrameworkBundleConsoleApplication $application */
+		$application = $this->getApplication();
+
+		$this->loader->load($application, $manager, $bundles, $environment, $append, $truncate, $shard, $purgeCachedDumpFile, $files);
+
 
         return 0;
     }

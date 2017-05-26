@@ -39,6 +39,8 @@ interface LoaderInterface
         string $environment,
         bool $append,
         bool $purgeWithTruncate,
-        string $shard = null
+        string $shard = null,
+		$purgeCachedDumpFile = false,
+		array $fixtureFiles = null
     );
 }

@@ -36,6 +36,9 @@ final class Configuration implements ConfigurationInterface
                     ->defaultValue('Resources/fixtures/orm')
                     ->info('Path to which to look for fixtures relative to the bundle path.')
                 ->end()
+				->booleanNode('use_cache')->defaultValue(false)->end()
+				->scalarNode('mysqldump_binary')->defaultValue('mysqldump')->end()
+				->scalarNode('mysql_binary')->defaultValue('mysql')->end()
             ->end()
         ;
 
