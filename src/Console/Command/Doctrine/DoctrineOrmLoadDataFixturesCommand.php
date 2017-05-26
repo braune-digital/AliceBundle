@@ -147,7 +147,11 @@ final class DoctrineOrmLoadDataFixturesCommand extends ContainerAwareCommand
 		$append = $input->getOption('append');
 		$truncate = $input->getOption('purge-with-truncate');
 		$purgeCachedDumpFile = $input->getOption('purge-cached-dump-file');
-		$files = explode(',', str_replace(' ', '', $input->getOption('files')));
+		if ($input->getOption('files')) {
+			$files = explode(',', str_replace(' ', '', $input->getOption('files')));
+		} else {
+			$files = null;
+		}
 		/** @var FrameworkBundleConsoleApplication $application */
 		$application = $this->getApplication();
 
